@@ -1,9 +1,12 @@
 <?php if (!defined('APPLICATION')) exit(); ?>
 <link rel="stylesheet" type="text/css" href="/plugins/GeoIPData/design/geoipdata.css" />
-<h1><?php echo $this->Data['Title'].' '.T('Settings'); ?></h1>
+<h1><?php echo T('Introduction'); ?></h1>
 <div class="Info">
-<?php echo T('This addon load GeoIP data from www.maxmind.com, unzips it and reads it into the Vanilla database so that you can use the tables GeoLiteCityBlocks and GeoLiteCityLocation.<br />
-By the time of creation, the download file had more than 25 MB, so each of those steps take quite a long time and in order to avoid timeouts, I had to split these steps up. Please be patient and take your time for each step. After that you have access to this information with the view '); ?>
+<?php echo T('The information provided by this plugin is stored in two tables', 'The information provided by this plugin is stored in two tables: GeoLiteCityBlocks and GeoLiteCityLocation. Please look at the view vw_GeoIPData for an example on how to access the information.'); ?>
+</div>
+<h1><?php echo $this->Data['Title'].' '.T('Import'); ?></h1>
+<div class="Info">
+<?php echo T('This plugin loads GeoIP data from www.maxmind.com', 'This plugin loads GeoIP data from www.maxmind.com, unzips it and reads it into the Vanilla database.<br/> By the time of creation, the download file had more than 25 MB. You\'ll need temporarely 100MB of disk space for the files.<br/>Most of the following steps take quite a long time and in order to avoid timeouts, I had to split these steps up. Please be patient and take your time for each step. If you encounter an error, please wait a few seconds and try the same action again.'); ?>
 </div>
 <div class="Configuration">
     <ol class="GeoIPDataSteps Info">
