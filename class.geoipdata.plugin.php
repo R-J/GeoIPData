@@ -9,7 +9,7 @@ $PluginInfo['GeoIPData'] = array(
     'RequiredTheme' => False, 
     'RequiredPlugins' => False,
     'RegisterPermissions' => FALSE,
-  'SettingsUrl' => '/dashboard/plugin/geoipdata',
+    'SettingsUrl' => '/dashboard/plugin/geoipdata',
     'SettingsPermission' => 'Garden.Settings.Manage',
     'HasLocale' => FALSE,
     'License' => 'GPLv2'
@@ -25,7 +25,7 @@ class GeoIPData extends Gdn_Plugin {
 
     /**
      * Called on activation of addon
-     * Creates Tables, Views and download GeoIP data
+     * Creates Tables
      *
      * @return void
      */    
@@ -34,52 +34,53 @@ class GeoIPData extends Gdn_Plugin {
     } // End of Setup
 
     /**
-     * Create table GeoLiteCityBlocks: BlockID|StartIPNumber|EndIPNumber|LocationID
-     * Create table GeoLiteCityLocation: 
+     * Creates table GeoLiteCityBlocks: BlockID|StartIPNumber|EndIPNumber|LocationID
+     * Creates table GeoLiteCityLocation: 
      *  LocationID|Country|Region|City|PostalCode|Latitude|Longitude|MetroCode|AreaCode
      * Create view GeoIPData for all IPs from User.LastIPAddress
      *
      * @return void
      */    
     private function structure() {
+        $Database = Gdn::Database();
         $Structure = Gdn::Structure();
         
         // create table for ip block ranges
-        $Structure->Table('GeoLiteCityBlocks')
-            ->Column('StartIPNumber', 'bigint', FALSE, 'key')
-            ->Column('EndIPNumber', 'bigint', FALSE, 'key')
-            ->Column('LocationID', 'int', FALSE)
-            ->Set(FALSE, FALSE);
-
+        if (!$Structure->Table('GeoLiteCityBlocks')->TableExists()) {
+            $Structure->Table('GeoLiteCityBlocks')
+                ->Column('StartIPNumber', 'bigint', FALSE, 'key')
+                ->Column('EndIPNumber', 'bigint', FALSE, 'key')
+                ->Column('LocationID', 'int', FALSE)
+                ->Set(FALSE, FALSE);
+        }
+        
         // create table for location information
-        $Structure->Table('GeoLiteCityLocation')
-            ->PrimaryKey('LocationID')
-            ->Column('Country', 'varchar(2)', FALSE)
-            ->Column('Region', 'varchar(2)', TRUE)
-            ->Column('City', 'varchar(64)', TRUE)
-            ->Column('PostalCode', 'int(8)', TRUE)
-            ->Column('Latitude', 'double', FALSE)
-            ->Column('Longitude', 'double', FALSE)
-            ->Column('MetroCode', 'varchar(3)', TRUE)
-            ->Column('AreaCode', 'varchar(3)', TRUE)
-            ->Set(FALSE, FALSE);
-            
-        // create viewfor each ip in 
-        /*
-        select
-            u.LastIPAddress
-            , l.*
-        from
-            User u
-            join GeoLiteCityBlocks b
-                on ip2long(u.LastIPAddress) >= b.StartIPNumber and ip2long(u.LastIPAddress) <= b.EndIPNumber
-            join GeoLiteCityLocation l
-                on b.LocationID = l.LocationID
-        */
+        if (!$Structure->Table('GeoLiteCityLocation')->TableExists()) {
+            $Structure->Table('GeoLiteCityLocation')
+                ->PrimaryKey('LocationID')
+                ->Column('Country', 'varchar(2)', FALSE)
+                ->Column('Region', 'varchar(2)', TRUE)
+                ->Column('City', 'varchar(64)', TRUE)
+                ->Column('PostalCode', 'int(8)', TRUE)
+                ->Column('Latitude', 'double', FALSE)
+                ->Column('Longitude', 'double', FALSE)
+                ->Column('MetroCode', 'varchar(3)', TRUE)
+                ->Column('AreaCode', 'varchar(3)', TRUE)
+                ->Set(FALSE, FALSE);
+        }
+
+/*        
+        // create view for User.LastIPAddress
+        $Sql = Gdn::SQL()->Select('u.LastIPAddress')
+            ->Select('l.*')
+            ->From('User u')
+            ->Join('GeoLiteCityBlocks b', 'ip2long(u.LastIPAddress) >= b.StartIPNumber and ip2long(u.LastIPAddress) <= b.EndIPNumber')
+            ->Join('GeoLiteCityLocation l', 'b.LocationID = l.LocationID')
+            ->GetSelect();
+        $Structure->View('vw_GeoIPData', $Sql);
+*/
     } // End of Structure
 
-   
-   
    /**
     * Creates [Settings] button in plugin screen and links to view geoipdata
     * 
@@ -93,98 +94,164 @@ class GeoIPData extends Gdn_Plugin {
     }
    
     /**
-     * Download GeoLite DB and fills it into GeoLiteCityBlocks and GeoLiteCityLocation
+     * Download GeoLite DB from maxmind server
      *
      * @param  array $Sender
      *
-     * @return boolean $success
+     * @return void
      */    
-    public function Controller_RefreshData($Sender) {
-$debugon = FALSE;        
+    public function Controller_Download($Sender) {
         // define filenames
         $source = 'http://geolite.maxmind.com/download/geoip/database/GeoLiteCity_CSV/GeoLiteCity-latest.zip';
         $target = PATH_UPLOADS.DS.'GeoLiteCity-latest.zip';
 
-        // get GeoLite DB
+        // to avoid timeouts, raise time limit
         set_time_limit(120);
-if($debugon==FALSE)        
+        // get GeoLite DB
         file_put_contents($target, file_get_contents($source));
-        
-        // check for error and return on error
+
         if (!file_exists($target)) {
             $Sender->InformMessage(T('Error while downloading GeoLite DB to '.$target));
-            $this->Controller_Index($Sender);
+        } else {
+            $Sender->InformMessage(T('Downloading GeoLiteCity-latest.zip'));
         }
-        
-        // unzip downloaded file quietly (-qq), dropping the subdirectories in
-        // the zip file (-j), always overwriting existing files without
-        // asking (-o) and store them in upload path (-d PATH_UPLOADS)
-if($debugon==FALSE)        
-        system('unzip -qqjo '.$target.' -d '.PATH_UPLOADS);
-
-        $blocks = PATH_UPLOADS.DS.'GeoLiteCity-Blocks.csv';
-        $location = PATH_UPLOADS.DS.'GeoLiteCity-Location.csv';
-        
-        // check if unzipping was successfull and return on error
-        if(!(file_exists($blocks) && file_exists($location))) {
-            $Sender->InformMessage(T('Error while unzipping GeoLite DB'));
-            $this->Controller_Index($Sender);
-        }
-        
-        // must build manual sql and so need the prefix
-        $Database = Gdn::Database();
-        $Px = $Database->DatabasePrefix;
-        $Structure = $Database->Structure();
-        
-        // import GeoLiteCity-Blocks.csv
-        $Sql = "LOAD DATA LOCAL INFILE '{$blocks}'
-            REPLACE
-            INTO TABLE `{$Px}GeoLiteCityBlocks`
-            FIELDS TERMINATED BY ','
-            OPTIONALLY ENCLOSED BY '\"'
-            LINES TERMINATED BY '\n'
-            IGNORE 2 LINES
-            (`StartIPNumber`, `EndIPNumber`, `LocationID`)";
- // if($debugon==FALSE)        
-        set_time_limit(120);
-        $Structure->Query($Sql);
-
-        // import GeoLiteCity-Location.csv
-        $Sql = "LOAD DATA LOCAL INFILE '{$location}'
-            REPLACE
-            INTO TABLE `{$Px}GeoLiteCityLocation`
-            FIELDS TERMINATED BY ','
-            OPTIONALLY ENCLOSED BY '\"'
-            LINES TERMINATED BY '\n'
-            IGNORE 2 LINES
-            (`LocationID`, `Country`, `Region`, `City`, `PostalCode`, `Latitude`, `Longitude`, `MetroCode`, `AreaCode`)";
-// if($debugon==FALSE)        
-        set_time_limit(120);
-        $Structure->Query($Sql);
-       
-        // clean up
-        unlink($target);        
-        unlink($blocks);
-        unlink($location);
-
-        
         $this->Controller_Index($Sender);
-    } // End of Controller_RefreshData
-
+    } // End of Controller_Download
+    
     /**
-     * Drops tables GeoLiteCityBlocks and GeoLiteCityLocation and view GeoIPData
+     * Unzip deflates GeoLiteCity-latest.zip to 
+     * GeoLiteCity-Blocks.csv and GeoLiteCity-Location.csv
      *
      * @param  array $Sender
      *
-     * @return boolean $success
+     * @return void
+     */    
+    public function Controller_Unzip($Sender) {
+        $zipfile = PATH_UPLOADS.DS.'GeoLiteCity-latest.zip';
+        // check for file exists and is bigger than 24 MB
+        if (file_exists($zipfile) && filesize($zipfile) >  25000000) {
+            // unzip downloaded file quietly (-qq), dropping the subdirectories in
+            // the zip file (-j), always overwriting existing files without
+            // asking (-o) and store them in upload path (-d PATH_UPLOADS)
+            system('unzip -qqjo '.$zipfile.' -d '.PATH_UPLOADS);
+            $Sender->InformMessage(T('File GeoLiteCity-latest.zip has been unzipped.'));
+        } else {
+            $Sender->InformMessage(T('File does not exist or is corrupt!'));
+        }
+        $this->Controller_Index($Sender);
+    } // End of Unzip
+    
+    /**
+     * Blocks2DB inserts file GeoLiteCity-Blocks.csv
+     * into table GeoLiteCityBlocks
+     *
+     * @param  array $Sender
+     *
+     * @return void
+     */    
+    public function Controller_Blocks2DB($Sender) {
+        // import GeoLiteCity-Blocks.csv
+        $infile = PATH_UPLOADS.DS.'GeoLiteCity-Blocks.csv';
+        // check if file exists and reasonable big
+        if (file_exists($infile) && filesize($infile) > 65000000) {
+            // ensure tables exist
+            $this->structure();
+            // must build manual sql and so need the prefix
+            $Px = Gdn::Database()->DatabasePrefix;
+
+            $Sql = "LOAD DATA LOCAL INFILE '{$infile}'
+                REPLACE
+                INTO TABLE `{$Px}GeoLiteCityBlocks`
+                FIELDS TERMINATED BY ','
+                OPTIONALLY ENCLOSED BY '\"'
+                LINES TERMINATED BY '\n'
+                IGNORE 2 LINES
+                (`StartIPNumber`, `EndIPNumber`, `LocationID`)";
+
+            // file is huge so we need to raise time limit in order to avoid timeouts
+            set_time_limit(120);
+            
+            Gdn::Structure()->Query($Sql);
+
+            $Sender->InformMessage(T('File GeoLiteCity-Blocks.csv has been uploaded to database.'));
+        } else {
+            $Sender->InformMessage(T('File does not exist or is corrupt!'));
+        }
+        $this->Controller_Index($Sender);
+    } // End of Controller_Blocks2DB
+    
+    /**
+     * Loc2DB inserts file GeoLiteCity-Location.csv
+     * into table GeoLiteCityLocation
+     *
+     * @param  array $Sender
+     *
+     * @return void
+     */    
+    public function Controller_Loc2DB($Sender) {
+        // import GeoLiteCity-Location.csv
+        $infile = PATH_UPLOADS.DS.'GeoLiteCity-Location.csv';
+        // check if file exists and reasonable big
+        if (file_exists($infile) && filesize($infile) > 22000000) {
+            // ensure tables exist
+            $this->structure();
+            // must build manual sql and so need the prefix
+            $Px = Gdn::Database()->DatabasePrefix;
+
+            $Sql = "LOAD DATA LOCAL INFILE '{$infile}'
+                REPLACE
+                INTO TABLE `{$Px}GeoLiteCityLocation`
+                FIELDS TERMINATED BY ','
+                OPTIONALLY ENCLOSED BY '\"'
+                LINES TERMINATED BY '\n'
+                IGNORE 2 LINES
+                (`LocationID`, `Country`, `Region`, `City`, `PostalCode`, `Latitude`, `Longitude`, `MetroCode`, `AreaCode`)";
+
+            // file is huge so we need to raise time limit in order to avoid timeouts
+            set_time_limit(120);
+            
+            Gdn::Structure()->Query($Sql);
+
+            $Sender->InformMessage(T('File GeoLiteCity-Location.csv has been uploaded to database.'));
+        } else {
+            $Sender->InformMessage(T('File does not exist or is corrupt!'));
+        }
+        $this->Controller_Index($Sender);
+    } // End of Controller_Loc2DB
+        
+    /**
+     * DeleteFiles deletes downloaded files
+     *
+     * @param  array $Sender
+     *
+     * @return void
+     */    
+    public function Controller_DeleteFiles($Sender) {
+        unlink(PATH_UPLOADS.DS.'GeoLiteCity-Blocks.csv');
+        unlink(PATH_UPLOADS.DS.'GeoLiteCity-Location.csv');
+        unlink(PATH_UPLOADS.DS.'GeoLiteCity-latest.zip');
+        
+        $Sender->InformMessage(T('Files deleted'));
+        $this->Controller_Index($Sender);
+    } // End of Controller_DeleteFiles
+        
+    /**
+     * DropTables dops tables GeoLiteCityBlocks
+     * and GeoLiteCityLocation and view GeoIPData
+     *
+     * @param  array $Sender
+     *
+     * @return void
      */    
     public function Controller_DropTables($Sender) {
         $Structure = Gdn::Structure();
         $Structure->Table('GeoLiteCityBlocks')->Drop();
         $Structure->Table('GeoLiteCityLocation')->Drop();
-        $Structure->Table('GeoIPData')->Drop();
+        
         $Sender->InformMessage(T('Tables dropped'));
         $this->Controller_Index($Sender);
     } // End of Controller_DropTables
+    
 } // End of GeoIPData
+
 ?>
