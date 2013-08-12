@@ -2,7 +2,7 @@
 
 $PluginInfo['GeoIPData'] = array(
     'Name' => 'GeoIP Data',
-    'Description' => 'Creates a new View "User.LastIPAddress|Country|Region|City|PostalCode|Latitude|Longitude|MetroCode|AreaCode" provided by GeoLite DB from www.maxmind.com (http://geolite.maxmind.com/download/geoip/database/GeoLiteCity_CSV/GeoLiteCity-latest.zip)',
+    'Description' => 'Stores GeoIP information provided from www.maxmind.com into database for fast access to longitude, latitude, country and city.',
     'Version' => '0.01',
     'Author' => 'Robin',
     'RequiredApplications' => array('Vanilla' => '>=2.0.18.8'),
@@ -37,12 +37,11 @@ class GeoIPData extends Gdn_Plugin {
      * Creates table GeoLiteCityBlocks: BlockID|StartIPNumber|EndIPNumber|LocationID
      * Creates table GeoLiteCityLocation: 
      *  LocationID|Country|Region|City|PostalCode|Latitude|Longitude|MetroCode|AreaCode
-     * Create view GeoIPData for all IPs from User.LastIPAddress
+     * Create view vw_GeoIPData for all IPs from User.LastIPAddress
      *
      * @return void
      */    
     private function structure() {
-        $Database = Gdn::Database();
         $Structure = Gdn::Structure();
         
         // create table for ip block ranges
@@ -69,16 +68,15 @@ class GeoIPData extends Gdn_Plugin {
                 ->Set(FALSE, FALSE);
         }
 
-/*        
         // create view for User.LastIPAddress
         $Sql = Gdn::SQL()->Select('u.LastIPAddress')
             ->Select('l.*')
             ->From('User u')
-            ->Join('GeoLiteCityBlocks b', 'ip2long(u.LastIPAddress) >= b.StartIPNumber and ip2long(u.LastIPAddress) <= b.EndIPNumber')
+            ->Join('GeoLiteCityBlocks b', ' INET_ATON(u.LastIPAddress) >= b.StartIPNumber and  INET_ATON(u.LastIPAddress) <= b.EndIPNumber')
             ->Join('GeoLiteCityLocation l', 'b.LocationID = l.LocationID')
             ->GetSelect();
         $Structure->View('vw_GeoIPData', $Sql);
-*/
+
     } // End of Structure
 
    /**
@@ -244,14 +242,17 @@ class GeoIPData extends Gdn_Plugin {
      * @return void
      */    
     public function Controller_DropTables($Sender) {
+        $Database = Gdn::Database();
         $Structure = Gdn::Structure();
         $Structure->Table('GeoLiteCityBlocks')->Drop();
         $Structure->Table('GeoLiteCityLocation')->Drop();
+  
+        $Px = Gdn::Database()->DatabasePrefix;
+        $Structure->Query("DROP VIEW IF EXISTS {$Px}vw_GeoIPData");
         
         $Sender->InformMessage(T('Tables dropped'));
         $this->Controller_Index($Sender);
     } // End of Controller_DropTables
     
 } // End of GeoIPData
-
 ?>
