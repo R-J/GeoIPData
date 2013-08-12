@@ -1,0 +1,9 @@
+.GeoIPDataSteps > li > div {
+    width: 80%;
+    float: left;
+}
+.GeoIPDataSteps > li {
+    width: 33em;
+    height: 3em;
+    padding-left: 3em;
+}
