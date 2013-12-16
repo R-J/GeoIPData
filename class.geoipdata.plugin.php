@@ -126,15 +126,15 @@ class GeoIPData extends Gdn_Plugin {
      */    
     public function Controller_Unzip($Sender) {
         $zipfile = PATH_UPLOADS.DS.'GeoLiteCity-latest.zip';
-        // check for file exists and is bigger than 24 MB
-        if (file_exists($zipfile) && filesize($zipfile) >  25000000) {
+        // check for file exists and is bigger than 21 MB
+        if (file_exists($zipfile) && filesize($zipfile) >  21000000) {
             // unzip downloaded file quietly (-qq), dropping the subdirectories in
             // the zip file (-j), always overwriting existing files without
             // asking (-o) and store them in upload path (-d PATH_UPLOADS)
             system('unzip -qqjo '.$zipfile.' -d '.PATH_UPLOADS);
             $Sender->InformMessage(T('File GeoLiteCity-latest.zip has been unzipped.'));
         } else {
-            $Sender->InformMessage(T('File does not exist or is corrupt!'));
+            $Sender->InformMessage(T('File GeoLiteCity-latest.zip does not exist or is corrupt!'));
         }
         $this->Controller_Index($Sender);
     } // End of Unzip
@@ -150,8 +150,8 @@ class GeoIPData extends Gdn_Plugin {
     public function Controller_Blocks2DB($Sender) {
         // import GeoLiteCity-Blocks.csv
         $infile = PATH_UPLOADS.DS.'GeoLiteCity-Blocks.csv';
-        // check if file exists and reasonable big
-        if (file_exists($infile) && filesize($infile) > 65000000) {
+        // check if file exists and has reasonable size
+        if (file_exists($infile) && filesize($infile) > 60000000) {
             // ensure tables exist
             $this->structure();
             // must build manual sql and so need the prefix
@@ -173,7 +173,7 @@ class GeoIPData extends Gdn_Plugin {
 
             $Sender->InformMessage(T('File GeoLiteCity-Blocks.csv has been uploaded to database.'));
         } else {
-            $Sender->InformMessage(T('File does not exist or is corrupt!'));
+            $Sender->InformMessage(T('File GeoLiteCity-Blocks.csv does not exist or is corrupt!'));
         }
         $this->Controller_Index($Sender);
     } // End of Controller_Blocks2DB
@@ -212,7 +212,7 @@ class GeoIPData extends Gdn_Plugin {
 
             $Sender->InformMessage(T('File GeoLiteCity-Location.csv has been uploaded to database.'));
         } else {
-            $Sender->InformMessage(T('File does not exist or is corrupt!'));
+            $Sender->InformMessage(T('File GeoLiteCity-Location.csv does not exist or is corrupt!'));
         }
         $this->Controller_Index($Sender);
     } // End of Controller_Loc2DB
