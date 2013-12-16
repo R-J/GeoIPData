@@ -255,4 +255,3 @@ class GeoIPData extends Gdn_Plugin {
     } // End of Controller_DropTables
     
 } // End of GeoIPData
-?>
